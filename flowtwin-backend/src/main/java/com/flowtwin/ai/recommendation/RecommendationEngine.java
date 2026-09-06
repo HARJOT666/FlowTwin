@@ -16,15 +16,16 @@ import java.util.Map;
 @Service
 public class RecommendationEngine {
     private static final List<String> LIMITATIONS = List.of(
-            "Prototype simulation starts empty and does not model doctor capacity or throughput.",
+            "Prototype resource and service-time assumptions require calibration with hospital data.",
             "Wait metrics exclude patients still waiting at the horizon; compare equal horizons and assumptions.",
             "Scores compare modeled patient flow, not clinical outcomes or intervention cost.");
 
     public RecommendationScore rankScenario(ScenarioResult result, SimConfig scenario) {
         // A blocked simulation can misleadingly report zero waits because nobody completes service.
-        if (scenario.arrivalRatePerHour() > 0 && (scenario.nurses() <= 0 || scenario.beds() <= 0)) {
+        if ((scenario.arrivalRatePerHour() > 0 || scenario.initialPatientsInDept() > 0)
+                && (scenario.nurses() <= 0 || scenario.beds() <= 0 || scenario.doctors() <= 0)) {
             return new RecommendationScore(-100, Impact.NEGATIVE,
-                    "Scenario removes required triage or bed capacity; zero completed waits are not an improvement.",
+                    "Scenario removes required nurse, doctor, or bed capacity; zero completed waits are not an improvement.",
                     Map.of("blockedCapacity", -100.0), LIMITATIONS);
         }
         return rankScenario(result);
@@ -33,10 +34,13 @@ public class RecommendationEngine {
     public RecommendationScore rankScenario(ScenarioResult result) {
         Metrics b = result.baseline(), s = result.scenario();
         Map<String, Double> parts = new LinkedHashMap<>();
-        parts.put("p90Wait", contribution(b.p90WaitMin(), s.p90WaitMin(), 40));
-        parts.put("averageTriageWait", contribution(b.avgTriageWaitMin(), s.avgTriageWaitMin(), 30));
-        parts.put("peakTriageQueue", contribution(b.peakTriageQueue(), s.peakTriageQueue(), 20));
-        parts.put("averageBedWait", contribution(b.avgBedWaitMin(), s.avgBedWaitMin(), 10));
+        parts.put("p90Wait", contribution(b.p90WaitMin(), s.p90WaitMin(), 30));
+        parts.put("averageTriageWait", contribution(b.avgTriageWaitMin(), s.avgTriageWaitMin(), 20));
+        parts.put("treatmentResourceWait", contribution(b.avgBedWaitMin(), s.avgBedWaitMin(), 15));
+        parts.put("peakTriageQueue", contribution(b.peakTriageQueue(), s.peakTriageQueue(), 15));
+        parts.put("peakTreatmentQueue", contribution(b.peakTreatmentQueue(), s.peakTreatmentQueue(), 10));
+        parts.put("completedThroughput", increaseContribution(
+                b.completedPatients(), s.completedPatients(), 10));
         double score = Math.round(parts.values().stream().mapToDouble(Double::doubleValue).sum() * 10) / 10.0;
         Impact impact = score < 0 ? Impact.NEGATIVE : score == 0 ? Impact.NONE
                 : score >= 30 ? Impact.HIGH : score >= 10 ? Impact.MEDIUM : Impact.LOW;
@@ -61,5 +65,12 @@ public class RecommendationEngine {
         }
         // One-unit denominator floor handles a zero baseline without inventing a percentage.
         return weight * Math.max(-1, Math.min(1, (baseline - scenario) / Math.max(1, baseline)));
+    }
+
+    private static double increaseContribution(double baseline, double scenario, double weight) {
+        if (!Double.isFinite(baseline) || !Double.isFinite(scenario) || baseline < 0 || scenario < 0) {
+            throw new IllegalArgumentException("Recommendation metrics must be finite and nonnegative");
+        }
+        return weight * Math.max(-1, Math.min(1, (scenario - baseline) / Math.max(1, baseline)));
     }
 }

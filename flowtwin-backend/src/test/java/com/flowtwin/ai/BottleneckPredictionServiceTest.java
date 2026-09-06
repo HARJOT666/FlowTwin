@@ -41,7 +41,7 @@ class BottleneckPredictionServiceTest {
     }
 
     @Test void treatmentNursingPressureCanDominate() {
-        var result = service.predict(new TwinState(30, 0, 5, 2, 100, 20, 0), forecast(0));
+        var result = service.predict(new TwinState(30, 0, 5, 2, 100, 10, 0), forecast(0));
         assertThat(result.zone()).isEqualTo(BottleneckPrediction.Zone.TREATMENT);
     }
 

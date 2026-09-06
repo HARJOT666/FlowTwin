@@ -20,9 +20,11 @@ services:
       - redis
     environment:
       POSTGRES_URL: jdbc:postgresql://postgres:5432/flowtwin
+      POSTGRES_USER: flowtwin
+      POSTGRES_PASSWORD: flowtwin
       REDIS_HOST: redis
-      LLM_PROVIDER: ${LLM_PROVIDER:-openai}
-      LLM_API_KEY: ${LLM_API_KEY}
-      LLM_MODEL: ${LLM_MODEL:-gpt-4o-mini}
+      FLOWTWIN_AI_PROVIDER: ${FLOWTWIN_AI_PROVIDER:-gemini}
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      GEMINI_MODEL: ${GEMINI_MODEL:-gemini-2.5-flash}
     ports:
       - "8080:8080"

@@ -1,7 +1,8 @@
 package com.flowtwin.ai;
 
 import com.flowtwin.model.*;
-import com.flowtwin.narration.NarrationProvider;
+import com.flowtwin.gemini.GeminiPromptBuilder;
+import com.flowtwin.gemini.GeminiService;
 import com.flowtwin.repository.PatientEventRepository;
 import com.flowtwin.repository.ScenarioRepository;
 import com.flowtwin.service.TwinStateService;
@@ -38,14 +39,16 @@ class AiIntegrationTest {
     @Autowired ScenarioRepository scenarios;
     @Autowired TwinStateService twin;
     @MockitoBean StringRedisTemplate redis;
-    @MockitoBean NarrationProvider provider;
+    @MockitoBean GeminiService gemini;
     @MockitoBean TwinBroadcaster broadcaster;
     private MockMvc mvc;
 
     @BeforeEach void setup() {
         mvc = MockMvcBuilders.webAppContextSetup(context).build();
         when(redis.opsForValue()).thenReturn(mock(ValueOperations.class));
-        when(provider.generate(anyString(), anyString())).thenThrow(new IllegalStateException("no API key"));
+        when(gemini.isConfigured()).thenReturn(true);
+        when(gemini.generateNarration(any(GeminiPromptBuilder.Prompt.class)))
+                .thenThrow(new IllegalStateException("no API key"));
         events.deleteAll();
         scenarios.deleteAll();
     }
@@ -63,7 +66,7 @@ class AiIntegrationTest {
                 .andExpect(jsonPath("$.recommendedFocus").value("NONE"));
         mvc.perform(get("/api/twin/state")).andExpect(status().isOk())
                 .andExpect(jsonPath("$.observedArrivalRatePerHour").value(0));
-        verifyNoInteractions(provider);
+        verify(gemini, never()).generateNarration(any(GeminiPromptBuilder.Prompt.class));
     }
 
     @Test void existingScenarioPostPersistsBroadcastsAndAddsRecommendation() throws Exception {
@@ -83,7 +86,9 @@ class AiIntegrationTest {
         mvc.perform(get("/api/scenarios/999999")).andExpect(status().isNotFound());
         verify(broadcaster).broadcastInsight(argThat(value -> value instanceof com.flowtwin.scenario.ScenarioResponse r
                 && r.recommendation() != null));
-        verify(provider).generate(contains("Do not calculate new numbers"), contains("Calculated scenario effectiveness"));
+        verify(gemini).generateNarration(argThat((GeminiPromptBuilder.Prompt prompt) ->
+                prompt.system().contains("Do not calculate new numbers")
+                        && prompt.user().contains("Calculated scenario effectiveness")));
     }
 
     @Test void arrivalQueryFiltersTypesAndUsesHalfOpenBoundaries() {

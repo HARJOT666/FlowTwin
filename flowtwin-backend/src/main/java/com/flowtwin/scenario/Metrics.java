@@ -7,11 +7,22 @@ public record Metrics(
         double avgBedWaitMin,
         double p90WaitMin,
         int peakTriageQueue,
-        double bedUtilizationPct
+        double bedUtilizationPct,
+        int totalPatients,
+        int completedPatients,
+        double avgLengthOfStayMin,
+        int peakTreatmentQueue
 ) {
+    public Metrics(double avgTriageWaitMin, double avgBedWaitMin, double p90WaitMin,
+                   int peakTriageQueue, double bedUtilizationPct) {
+        this(avgTriageWaitMin, avgBedWaitMin, p90WaitMin, peakTriageQueue,
+                bedUtilizationPct, 0, 0, 0, 0);
+    }
+
     public static Metrics from(SimResult r) {
         return new Metrics(r.avgTriageWaitMin(), r.avgBedWaitMin(), r.p90WaitMin(),
-                r.peakTriageQueue(), r.bedUtilizationPct());
+                r.peakTriageQueue(), r.bedUtilizationPct(), r.totalPatients(),
+                r.completedPatients(), r.avgLengthOfStayMin(), r.peakTreatmentQueue());
     }
 
     /** Returns (this - other) per field. Negative wait deltas = improvement. */
@@ -21,7 +32,11 @@ public record Metrics(
                 round(avgBedWaitMin - o.avgBedWaitMin),
                 round(p90WaitMin - o.p90WaitMin),
                 peakTriageQueue - o.peakTriageQueue,
-                round(bedUtilizationPct - o.bedUtilizationPct)
+                round(bedUtilizationPct - o.bedUtilizationPct),
+                totalPatients - o.totalPatients,
+                completedPatients - o.completedPatients,
+                round(avgLengthOfStayMin - o.avgLengthOfStayMin),
+                peakTreatmentQueue - o.peakTreatmentQueue
         );
     }
 

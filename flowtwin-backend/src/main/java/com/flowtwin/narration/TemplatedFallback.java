@@ -1,19 +1,21 @@
 package com.flowtwin.narration;
 
+import com.flowtwin.gemini.model.ChatResponse;
 import com.flowtwin.scenario.ScenarioResult;
 
 import java.util.ArrayList;
 import java.util.List;
 
 /**
- * Deterministic explanation built purely from the numbers. Demo safety net for when the
- * LLM is unreachable - the AI path is the intended one; this only prevents a blank card.
+ * Deterministic narration built purely from the numbers. Safety net for when Gemini is
+ * unavailable or fails - Gemini is the intended path; this only prevents a blank card and
+ * guarantees the app always responds. Produces a {@link ChatResponse} with source "fallback".
  */
 public final class TemplatedFallback {
 
     private TemplatedFallback() { }
 
-    public static NarrationResult build(ScenarioResult r) {
+    public static ChatResponse build(ScenarioResult r) {
         double p90Delta = r.delta().p90WaitMin();
         String direction = p90Delta < 0 ? "reduces" : p90Delta > 0 ? "increases" : "does not change";
         String summary = String.format(
@@ -29,6 +31,6 @@ public final class TemplatedFallback {
         if (recs.isEmpty())
             recs.add("Metrics are within normal range for this horizon.");
 
-        return new NarrationResult(summary, recs, "fallback");
+        return new ChatResponse(summary, recs, List.of(), "fallback");
     }
 }

@@ -17,9 +17,9 @@ class RecommendationEngineTest {
 
     @Test void beneficialScenarioHasExplainablePositiveScore() {
         var score = engine.rankScenario(result(new Metrics(10, 15, 30, 10, 80)));
-        assertThat(score.score()).isEqualTo(50);
+        assertThat(score.score()).isEqualTo(40);
         assertThat(score.impact()).isEqualTo(Impact.HIGH);
-        assertThat(score.weightedContributions().values().stream().mapToDouble(Double::doubleValue).sum()).isEqualTo(50);
+        assertThat(score.weightedContributions().values().stream().mapToDouble(Double::doubleValue).sum()).isEqualTo(40);
     }
 
     @Test void neutralScenarioScoresZero() {
@@ -30,14 +30,14 @@ class RecommendationEngineTest {
 
     @Test void worseScenarioHasNegativeScore() {
         var score = engine.rankScenario(result(new Metrics(40, 60, 120, 40, 100)));
-        assertThat(score.score()).isEqualTo(-100);
+        assertThat(score.score()).isEqualTo(-80);
         assertThat(score.impact()).isEqualTo(Impact.NEGATIVE);
     }
 
     @Test void zeroBaselinePenalizesNewWaitsWithoutDivisionByZero() {
         Metrics zero = new Metrics(0, 0, 0, 0, 0);
         var score = engine.rankScenario(new ScenarioResult("Worse", zero, baseline, baseline, List.of()));
-        assertThat(score.score()).isEqualTo(-100);
+        assertThat(score.score()).isEqualTo(-80);
     }
 
     @Test void utilizationAloneDoesNotInventBenefit() {
@@ -46,7 +46,7 @@ class RecommendationEngineTest {
 
     @Test void alternativesAreOrderedByCalculatedScore() {
         var ranked = engine.rankScenarios(List.of(result(baseline), result(new Metrics(10, 15, 30, 10, 80))));
-        assertThat(ranked.get(0).recommendation().score()).isEqualTo(50);
+        assertThat(ranked.get(0).recommendation().score()).isEqualTo(40);
         assertThat(ranked.get(1).recommendation().score()).isZero();
     }
 

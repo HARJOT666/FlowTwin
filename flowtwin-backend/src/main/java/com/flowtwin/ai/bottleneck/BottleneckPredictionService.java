@@ -36,7 +36,12 @@ public class BottleneckPredictionService {
         pressure.put("TRIAGE", triage);
         pressure.put("BEDS", beds);
         pressure.put("DOCTORS", ratio(load + arrivals, s.doctors() * 6.0));
-        pressure.put("TREATMENT", ratio(Math.max(0, load - queue), s.nurses() * 4.0));
+        double treatment = ratio(Math.max(0, load - queue), Math.min(s.beds(), s.doctors()) * 2.0);
+        if (simulation != null) {
+            treatment = Math.max(treatment,
+                    ratio(simulation.peakTreatmentQueue(), Math.min(s.beds(), s.doctors()) * 2.0));
+        }
+        pressure.put("TREATMENT", treatment);
         String highest = "TRIAGE";
         for (String zone : pressure.keySet()) {
             if (pressure.get(zone) > pressure.get(highest)) highest = zone;

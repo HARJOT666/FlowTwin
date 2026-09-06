@@ -2,146 +2,256 @@ package com.flowtwin.simulation;
 
 import org.springframework.stereotype.Component;
 
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.Comparator;
+import java.util.List;
+import java.util.PriorityQueue;
+import java.util.Random;
 
 /**
- * Minimal but real discrete-event simulation of an ED as a two-stage queueing network:
- * arrival -> triage (nurses) -> bed/treatment (beds) -> discharge.
- * Deterministic given the same seed, so scenarios are comparable.
- *
- * This is the piece worth borrowing conceptually from ED-flow references; everything
- * around it is FlowTwin's own engineering.
+ * Deterministic ED discrete-event simulation adapted from Ujjwal's acuity/resource engine.
+ * Flow: arrival -> acuity-priority triage -> doctor+bed treatment -> discharge.
+ * Each run owns all mutable state, so the singleton Spring component is safe for concurrent scenarios.
  */
 @Component
 public class SimulationEngine {
-
-    private enum EType { ARRIVAL, TRIAGE_DONE, DISCHARGE, TICK }
-
-    private static final class Patient {
-        double arrivalTime;
-        double triageWait;
-        double bedReadyTime;
-        double bedWait;
-    }
-
-    private record SimEvent(double time, EType type, Patient patient) {}
-
     private static final int TICK_MINUTES = 5;
 
-    public SimResult run(SimConfig c) {
-        Random rng = new Random(c.seed());
-        PriorityQueue<SimEvent> pq = new PriorityQueue<>(Comparator.comparingDouble(SimEvent::time));
+    public SimResult run(SimConfig config) {
+        validate(config);
+        return new Run(config).execute();
+    }
 
-        int freeNurses = c.nurses();
-        int freeBeds = c.beds();
-        Deque<Patient> triageQueue = new ArrayDeque<>();
-        Deque<Patient> bedQueue = new ArrayDeque<>();
+    private static void validate(SimConfig c) {
+        if (c.horizonMinutes() <= 0 || c.arrivalRatePerHour() < 0
+                || c.meanTriageMinutes() <= 0 || c.meanTreatmentMinutes() <= 0
+                || c.nurses() < 0 || c.beds() < 0 || c.doctors() < 0
+                || c.initialTriageQueue() < 0 || c.initialBedsOccupied() < 0
+                || c.initialPatientsInDept() < 0) {
+            throw new IllegalArgumentException("Simulation values must be nonnegative and durations positive");
+        }
+    }
 
-        List<Double> totalWaits = new ArrayList<>();
-        double triageWaitSum = 0; int triageCount = 0;
-        double bedWaitSum = 0; int bedCount = 0;
-        int peakTriageQueue = 0;
+    private enum Type { ARRIVAL, TRIAGE_DONE, TREATMENT_DONE, INITIAL_TREATMENT_DONE, TICK }
 
-        int occupiedBeds = 0;
-        double busyBedTime = 0.0;
-        double lastTime = 0.0;
+    private static final class Patient {
+        final long id;
+        final int acuity;
+        final double arrivalTime;
+        double triageWait;
+        double treatmentReadyTime;
+        double treatmentWait;
 
-        List<TimelinePoint> timeline = new ArrayList<>();
+        Patient(long id, int acuity, double arrivalTime) {
+            this.id = id;
+            this.acuity = acuity;
+            this.arrivalTime = arrivalTime;
+        }
+    }
 
-        double horizon = c.horizonMinutes();
-        double meanInterArrival = 60.0 / Math.max(0.0001, c.arrivalRatePerHour());
+    private record Event(double time, long sequence, Type type, Patient patient, boolean releasesDoctor) {}
 
-        pq.add(new SimEvent(expo(rng, meanInterArrival), EType.ARRIVAL, null));
-        pq.add(new SimEvent(TICK_MINUTES, EType.TICK, null));
+    private static final Comparator<Patient> PATIENT_PRIORITY = Comparator
+            .comparingInt((Patient p) -> p.acuity).reversed()
+            .thenComparingDouble(p -> p.arrivalTime)
+            .thenComparingLong(p -> p.id);
 
-        while (!pq.isEmpty()) {
-            SimEvent e = pq.poll();
-            if (e.time() > horizon) break;
+    private static final class Run {
+        private final SimConfig c;
+        private final Random random;
+        private final PriorityQueue<Event> events = new PriorityQueue<>(Comparator
+                .comparingDouble(Event::time).thenComparingLong(Event::sequence));
+        private final PriorityQueue<Patient> triageQueue = new PriorityQueue<>(PATIENT_PRIORITY);
+        private final PriorityQueue<Patient> treatmentQueue = new PriorityQueue<>(PATIENT_PRIORITY);
+        private final List<Double> queueWaits = new ArrayList<>();
+        private final List<TimelinePoint> timeline = new ArrayList<>();
+        private long sequence;
+        private long patientId;
+        private int freeNurses;
+        private int freeDoctors;
+        private int occupiedBeds;
+        private int totalPatients;
+        private int completedPatients;
+        private int triageStarted;
+        private int treatmentStarted;
+        private int peakTriageQueue;
+        private int peakTreatmentQueue;
+        private double triageWaitTotal;
+        private double treatmentWaitTotal;
+        private double lengthOfStayTotal;
+        private double busyBedMinutes;
+        private double lastEventTime;
 
-            busyBedTime += occupiedBeds * (e.time() - lastTime);
-            lastTime = e.time();
+        Run(SimConfig config) {
+            c = config;
+            random = new Random(c.seed());
+            freeNurses = c.nurses();
+            occupiedBeds = Math.min(c.beds(), Math.min(c.initialBedsOccupied(), c.initialPatientsInDept()));
+            int initiallyBusyDoctors = Math.min(c.doctors(), occupiedBeds);
+            freeDoctors = c.doctors() - initiallyBusyDoctors;
+            totalPatients = c.initialPatientsInDept();
 
-            switch (e.type()) {
-                case ARRIVAL -> {
-                    Patient p = new Patient();
-                    p.arrivalTime = e.time();
-
-                    double next = e.time() + expo(rng, meanInterArrival);
-                    if (next <= horizon) pq.add(new SimEvent(next, EType.ARRIVAL, null));
-
-                    if (freeNurses > 0) {
-                        freeNurses--;
-                        p.triageWait = 0;
-                        triageCount++;
-                        pq.add(new SimEvent(e.time() + expo(rng, c.meanTriageMinutes()), EType.TRIAGE_DONE, p));
-                    } else {
-                        triageQueue.addLast(p);
-                    }
-                }
-                case TRIAGE_DONE -> {
-                    Patient p = e.patient();
-                    freeNurses++;
-
-                    if (!triageQueue.isEmpty()) {
-                        Patient nextP = triageQueue.pollFirst();
-                        freeNurses--;
-                        nextP.triageWait = e.time() - nextP.arrivalTime;
-                        triageWaitSum += nextP.triageWait; triageCount++;
-                        pq.add(new SimEvent(e.time() + expo(rng, c.meanTriageMinutes()), EType.TRIAGE_DONE, nextP));
-                    }
-
-                    p.bedReadyTime = e.time();
-                    if (freeBeds > 0) {
-                        freeBeds--; occupiedBeds++;
-                        p.bedWait = 0; bedCount++;
-                        totalWaits.add(p.triageWait + p.bedWait);
-                        pq.add(new SimEvent(e.time() + expo(rng, c.meanTreatmentMinutes()), EType.DISCHARGE, p));
-                    } else {
-                        bedQueue.addLast(p);
-                    }
-                }
-                case DISCHARGE -> {
-                    freeBeds++; occupiedBeds--;
-                    if (!bedQueue.isEmpty()) {
-                        Patient nextP = bedQueue.pollFirst();
-                        freeBeds--; occupiedBeds++;
-                        nextP.bedWait = e.time() - nextP.bedReadyTime;
-                        bedWaitSum += nextP.bedWait; bedCount++;
-                        totalWaits.add(nextP.triageWait + nextP.bedWait);
-                        pq.add(new SimEvent(e.time() + expo(rng, c.meanTreatmentMinutes()), EType.DISCHARGE, nextP));
-                    }
-                }
-                case TICK -> {
-                    timeline.add(new TimelinePoint((int) Math.round(e.time()), triageQueue.size(), occupiedBeds));
-                    double nextTick = e.time() + TICK_MINUTES;
-                    if (nextTick <= horizon) pq.add(new SimEvent(nextTick, EType.TICK, null));
-                }
+            for (int i = 0; i < occupiedBeds; i++) {
+                schedule(exponential(c.meanTreatmentMinutes()), Type.INITIAL_TREATMENT_DONE,
+                        null, i < initiallyBusyDoctors);
             }
-            peakTriageQueue = Math.max(peakTriageQueue, triageQueue.size());
+            int initialTriage = Math.min(c.initialTriageQueue(), Math.max(0, totalPatients - occupiedBeds));
+            for (int i = 0; i < initialTriage; i++) triageQueue.add(new Patient(++patientId, 2, 0));
+            int initialTreatment = Math.max(0, totalPatients - initialTriage - occupiedBeds);
+            for (int i = 0; i < initialTreatment; i++) {
+                Patient patient = new Patient(++patientId, 2, 0);
+                patient.treatmentReadyTime = 0;
+                treatmentQueue.add(patient);
+            }
         }
 
-        double avgTriage = triageCount == 0 ? 0 : triageWaitSum / triageCount;
-        double avgBed = bedCount == 0 ? 0 : bedWaitSum / bedCount;
-        double p90 = percentile(totalWaits);
-        double util = c.beds() <= 0 ? 0 : (busyBedTime / (c.beds() * horizon)) * 100.0;
+        SimResult execute() {
+            startTriage(0);
+            startTreatment(0);
+            updatePeaks();
+            capture(0);
+            if (c.arrivalRatePerHour() > 0) {
+                schedule(exponential(60.0 / c.arrivalRatePerHour()), Type.ARRIVAL, null, false);
+            }
+            schedule(TICK_MINUTES, Type.TICK, null, false);
 
-        return new SimResult(round(avgTriage), round(avgBed), round(p90), peakTriageQueue, round(util), timeline);
+            while (!events.isEmpty()) {
+                Event event = events.poll();
+                if (event.time() > c.horizonMinutes()) break;
+                accumulateUtilization(event.time());
+                switch (event.type()) {
+                    case ARRIVAL -> arrive(event.time());
+                    case TRIAGE_DONE -> finishTriage(event.patient(), event.time());
+                    case TREATMENT_DONE -> finishTreatment(event.patient(), event.time());
+                    case INITIAL_TREATMENT_DONE -> finishInitialTreatment(event.time(), event.releasesDoctor());
+                    case TICK -> {
+                        capture(event.time());
+                        if (event.time() + TICK_MINUTES <= c.horizonMinutes())
+                            schedule(event.time() + TICK_MINUTES, Type.TICK, null, false);
+                    }
+                }
+                updatePeaks();
+            }
+            accumulateUtilization(c.horizonMinutes());
+            return result();
+        }
+
+        private void arrive(double time) {
+            Patient patient = new Patient(++patientId, randomAcuity(), time);
+            totalPatients++;
+            triageQueue.add(patient);
+            startTriage(time);
+            double next = time + exponential(60.0 / c.arrivalRatePerHour());
+            if (next <= c.horizonMinutes()) schedule(next, Type.ARRIVAL, null, false);
+        }
+
+        private void startTriage(double time) {
+            while (freeNurses > 0 && !triageQueue.isEmpty()) {
+                Patient patient = triageQueue.poll();
+                freeNurses--;
+                patient.triageWait = Math.max(0, time - patient.arrivalTime);
+                triageWaitTotal += patient.triageWait;
+                triageStarted++;
+                schedule(time + exponential(c.meanTriageMinutes() * triageFactor(patient.acuity)),
+                        Type.TRIAGE_DONE, patient, false);
+            }
+        }
+
+        private void finishTriage(Patient patient, double time) {
+            freeNurses++;
+            patient.treatmentReadyTime = time;
+            treatmentQueue.add(patient);
+            startTriage(time);
+            startTreatment(time);
+        }
+
+        private void startTreatment(double time) {
+            while (occupiedBeds < c.beds() && freeDoctors > 0 && !treatmentQueue.isEmpty()) {
+                Patient patient = treatmentQueue.poll();
+                occupiedBeds++;
+                freeDoctors--;
+                patient.treatmentWait = Math.max(0, time - patient.treatmentReadyTime);
+                treatmentWaitTotal += patient.treatmentWait;
+                treatmentStarted++;
+                queueWaits.add(patient.triageWait + patient.treatmentWait);
+                schedule(time + exponential(c.meanTreatmentMinutes() * treatmentFactor(patient.acuity)),
+                        Type.TREATMENT_DONE, patient, true);
+            }
+        }
+
+        private void finishTreatment(Patient patient, double time) {
+            occupiedBeds--;
+            freeDoctors++;
+            completedPatients++;
+            lengthOfStayTotal += Math.max(0, time - patient.arrivalTime);
+            startTreatment(time);
+        }
+
+        private void finishInitialTreatment(double time, boolean releasesDoctor) {
+            occupiedBeds--;
+            if (releasesDoctor) freeDoctors++;
+            startTreatment(time);
+        }
+
+        private void schedule(double time, Type type, Patient patient, boolean releasesDoctor) {
+            if (Double.isFinite(time)) events.add(new Event(time, sequence++, type, patient, releasesDoctor));
+        }
+
+        private void capture(double time) {
+            timeline.add(new TimelinePoint((int) Math.round(time), triageQueue.size(),
+                    treatmentQueue.size(), occupiedBeds));
+        }
+
+        private void updatePeaks() {
+            peakTriageQueue = Math.max(peakTriageQueue, triageQueue.size());
+            peakTreatmentQueue = Math.max(peakTreatmentQueue, treatmentQueue.size());
+        }
+
+        private void accumulateUtilization(double time) {
+            busyBedMinutes += occupiedBeds * Math.max(0, time - lastEventTime);
+            lastEventTime = time;
+        }
+
+        private int randomAcuity() {
+            double value = random.nextDouble();
+            return value < 0.10 ? 3 : value < 0.40 ? 2 : 1;
+        }
+
+        private double exponential(double mean) {
+            return -mean * Math.log1p(-random.nextDouble());
+        }
+
+        private SimResult result() {
+            double utilization = c.beds() == 0 ? 0
+                    : busyBedMinutes / (c.beds() * c.horizonMinutes()) * 100.0;
+            return new SimResult(
+                    round(triageStarted == 0 ? 0 : triageWaitTotal / triageStarted),
+                    round(treatmentStarted == 0 ? 0 : treatmentWaitTotal / treatmentStarted),
+                    round(percentile(queueWaits)), peakTriageQueue, round(utilization), totalPatients,
+                    completedPatients, round(completedPatients == 0 ? 0 : lengthOfStayTotal / completedPatients),
+                    peakTreatmentQueue, List.copyOf(timeline));
+        }
     }
 
-    private static double expo(Random rng, double mean) {
-        return -mean * Math.log(1 - rng.nextDouble());
+    private static double triageFactor(int acuity) {
+        return acuity == 3 ? 0.75 : acuity == 2 ? 0.9 : 1.1;
     }
 
-    private static double percentile(List<Double> xs) {
-        if (xs.isEmpty()) return 0;
-        List<Double> s = new ArrayList<>(xs);
-        Collections.sort(s);
-        int idx = (int) Math.ceil(0.90 * s.size()) - 1;
-        idx = Math.max(0, Math.min(s.size() - 1, idx));
-        return s.get(idx);
+    private static double treatmentFactor(int acuity) {
+        return acuity == 3 ? 1.35 : acuity == 2 ? 1.0 : 0.75;
     }
 
-    private static double round(double v) {
-        return Math.round(v * 10.0) / 10.0;
+    private static double percentile(List<Double> values) {
+        if (values.isEmpty()) return 0;
+        List<Double> sorted = new ArrayList<>(values);
+        Collections.sort(sorted);
+        int index = Math.max(0, Math.min(sorted.size() - 1,
+                (int) Math.ceil(0.90 * sorted.size()) - 1));
+        return sorted.get(index);
+    }
+
+    private static double round(double value) {
+        return Math.round(value * 10.0) / 10.0;
     }
 }
