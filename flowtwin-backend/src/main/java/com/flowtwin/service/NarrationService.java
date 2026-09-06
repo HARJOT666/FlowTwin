@@ -53,7 +53,9 @@ public class NarrationService {
             writeCache(key, res);
             return res;
         } catch (Exception ex) {
-            log.warn("Gemini narration failed ({}). Falling back to templated summary.", ex.getMessage());
+            // Log the FULL exception (message + stack trace + root cause) so transport/config
+            // failures are diagnosable. Fallback still runs, so the app never crashes.
+            log.warn("Gemini narration failed. Falling back to templated summary.", ex);
             return TemplatedFallback.build(result);
         }
     }

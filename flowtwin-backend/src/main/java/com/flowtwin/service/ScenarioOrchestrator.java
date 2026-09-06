@@ -49,49 +49,68 @@ public class ScenarioOrchestrator {
     }
 
     public ScenarioResponse run(ScenarioRequest req) {
+        // Step 1: Read the current live twin state.
         TwinState now = twin.snapshot();
+
+        // Step 2: Work out the current arrival rate and the simulation horizon.
+        double arrivalRatePerHour = now.observedArrivalRatePerHour();
         int horizonMin = Math.max(1, req.horizonHours()) * 60;
 
+        // Step 3: Build the baseline simulation configuration from the live state.
         SimConfig baselineCfg = new SimConfig(
-                horizonMin, now.observedArrivalRatePerHour(),
+                horizonMin, arrivalRatePerHour,
                 MEAN_TRIAGE_MIN, MEAN_TREATMENT_MIN,
                 now.nurses(), now.beds(), now.doctors(), SEED);
 
+        // Step 4: Run the baseline simulation.
+        SimResult baselineResult = engine.run(baselineCfg);
+
+        // Steps 5 & 6: Apply the requested changes to build the scenario configuration.
         SimConfig scenarioCfg = applyChanges(baselineCfg, req.changes());
 
-        SimResult baseRes = engine.run(baselineCfg);
-        SimResult scenRes = engine.run(scenarioCfg);
+        // Step 7: Run the scenario simulation.
+        SimResult scenarioResult = engine.run(scenarioCfg);
 
-        Metrics baseline = Metrics.from(baseRes);
-        Metrics scenario = Metrics.from(scenRes);
+        // Step 8: Turn both runs into metrics and compute the difference.
+        Metrics baseline = Metrics.from(baselineResult);
+        Metrics scenario = Metrics.from(scenarioResult);
         Metrics delta = scenario.minus(baseline);
 
         ScenarioResult result = new ScenarioResult(
                 req.name() == null ? "Scenario" : req.name(),
-                baseline, scenario, delta, detectBottlenecks(baseRes));
+                baseline, scenario, delta, detectBottlenecks(baselineResult));
 
-        ChatResponse narr = narration.narrate(result);
+        // Step 9: Generate narration (Gemini, or templated fallback), then persist and broadcast.
+        ChatResponse narrationResult = narration.narrate(result);
 
         ScenarioEntity saved = repository.save(new ScenarioEntity(
                 result.name(), baseline.p90WaitMin(), scenario.p90WaitMin(),
-                narr.summary(), String.join("\n", narr.recommendations())));
+                narrationResult.summary(), String.join("\n", narrationResult.recommendations())));
 
-        ScenarioResponse response = new ScenarioResponse(saved.getId(), result, narr);
+        ScenarioResponse response = new ScenarioResponse(saved.getId(), result, narrationResult);
         broadcaster.broadcastInsight(response);
         return response;
     }
 
-    private SimConfig applyChanges(SimConfig c, List<ScenarioChange> changes) {
-        int nurses = c.nurses(), beds = c.beds(), doctors = c.doctors();
-        for (ScenarioChange ch : changes) {
-            // TODO: honour ch.from()/ch.to() time windows instead of applying for the whole horizon.
-            if (ch.role() == ResourceRole.NURSE) nurses += ch.delta();
-            else if (ch.role() == ResourceRole.DOCTOR) doctors += ch.delta();
-            else if (ch.role() == ResourceRole.BED || "CAPACITY".equalsIgnoreCase(ch.type())) beds += ch.delta();
+    private SimConfig applyChanges(SimConfig baseCfg, List<ScenarioChange> changes) {
+        int nurses = baseCfg.nurses();
+        int beds = baseCfg.beds();
+        int doctors = baseCfg.doctors();
+
+        for (ScenarioChange change : changes) {
+            // TODO: honour change.from()/change.to() time windows instead of the whole horizon.
+            if (change.role() == ResourceRole.NURSE) {
+                nurses += change.delta();
+            } else if (change.role() == ResourceRole.DOCTOR) {
+                doctors += change.delta();
+            } else if (change.role() == ResourceRole.BED || "CAPACITY".equalsIgnoreCase(change.type())) {
+                beds += change.delta();
+            }
         }
-        return new SimConfig(c.horizonMinutes(), c.arrivalRatePerHour(),
-                c.meanTriageMinutes(), c.meanTreatmentMinutes(),
-                Math.max(0, nurses), Math.max(0, beds), Math.max(0, doctors), c.seed());
+
+        return new SimConfig(baseCfg.horizonMinutes(), baseCfg.arrivalRatePerHour(),
+                baseCfg.meanTriageMinutes(), baseCfg.meanTreatmentMinutes(),
+                Math.max(0, nurses), Math.max(0, beds), Math.max(0, doctors), baseCfg.seed());
     }
 
     private List<String> detectBottlenecks(SimResult r) {

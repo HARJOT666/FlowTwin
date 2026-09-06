@@ -27,6 +27,17 @@ public class TwinStateService {
     private final Deque<Long> arrivals = new ArrayDeque<>();
     private static final long ONE_HOUR_MS = 3_600_000L;
 
+    // --- Arrival-rate estimation settings --------------------------------------------------
+    // Demand assumed during startup, before we have enough live data to trust.
+    private static final double BASELINE_ARRIVALS_PER_HOUR = 12.0;
+    // We only trust live data after we have been observing for at least this long...
+    private static final long WARMUP_MILLIS = 2 * 60 * 1000L;   // 2 minutes
+    // ...and after we have seen at least this many arrivals in the window.
+    private static final int MIN_ARRIVALS_FOR_LIVE = 10;
+
+    // When this service started observing events - used to measure the real window length.
+    private final long startedAtMs = System.currentTimeMillis();
+
     private final StringRedisTemplate redis;
 
     public TwinStateService(StringRedisTemplate redis) {
@@ -60,10 +71,31 @@ public class TwinStateService {
         );
     }
 
+    /**
+     * Estimates how many patients arrive per hour.
+     *
+     * <p>During startup we have too few live events for a meaningful estimate, so we return a
+     * stable BASELINE demand. Once we have observed for long enough AND seen enough arrivals, we
+     * switch to the REAL observed rate: the number of arrivals divided by how long we have
+     * actually been watching (never more than one hour, because older arrivals are pruned).
+     */
     public double observedArrivalRatePerHour() {
         pruneArrivals();
-        int count = arrivals.size();
-        return count > 0 ? count : 12.0;
+
+        long observedForMs = System.currentTimeMillis() - startedAtMs;
+        int arrivalsInWindow = arrivals.size();
+
+        // Still warming up: not enough time OR not enough events yet -> use a stable baseline.
+        boolean notEnoughTime = observedForMs < WARMUP_MILLIS;
+        boolean notEnoughEvents = arrivalsInWindow < MIN_ARRIVALS_FOR_LIVE;
+        if (notEnoughTime || notEnoughEvents) {
+            return BASELINE_ARRIVALS_PER_HOUR;
+        }
+
+        // Warmed up: use the real rate = arrivals / hours observed (window capped at one hour).
+        long windowMs = Math.min(observedForMs, ONE_HOUR_MS);
+        double windowHours = windowMs / (double) ONE_HOUR_MS;
+        return arrivalsInWindow / windowHours;
     }
 
     private void recordArrival(long epochMs) {

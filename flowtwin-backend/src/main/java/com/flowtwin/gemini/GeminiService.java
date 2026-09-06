@@ -11,6 +11,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.http.MediaType;
 import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.stereotype.Service;
+import org.springframework.web.client.ResourceAccessException;
 import org.springframework.web.client.RestClient;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
@@ -81,15 +82,33 @@ public class GeminiService {
         GeminiPromptBuilder.Prompt prompt = promptBuilder.build(result);
         GeminiRequest request = GeminiRequest.narration(prompt.system(), prompt.user());
 
-        GeminiResponse response = client.post()
-                .uri("/models/{model}:generateContent", cfg.model())
-                .header("x-goog-api-key", cfg.apiKey())
-                .contentType(MediaType.APPLICATION_JSON)
-                .body(request)
-                .retrieve()
-                .body(GeminiResponse.class);
+        return toChatResponse(postWithRetry(request));
+    }
 
-        return toChatResponse(response);
+    /**
+     * POSTs to Gemini, retrying ONCE on a transport error (e.g. a transient
+     * {@code UnknownHostException}/connection failure) so a brief DNS/network blip recovers.
+     * HTTP status errors (400/404/...) are NOT retried, and the exception is rethrown after the
+     * final attempt so {@link com.flowtwin.service.NarrationService} still falls back safely.
+     */
+    private GeminiResponse postWithRetry(GeminiRequest request) {
+        ResourceAccessException lastTransportError = null;
+        for (int attempt = 1; attempt <= 2; attempt++) {
+            try {
+                return client.post()
+                        .uri("/models/{model}:generateContent", cfg.model())
+                        .header("x-goog-api-key", cfg.apiKey())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .body(request)
+                        .retrieve()
+                        .body(GeminiResponse.class);
+            } catch (ResourceAccessException transportError) {
+                lastTransportError = transportError;
+                log.warn("Gemini transport error on attempt {}/2 ({}); retrying if attempts remain.",
+                        attempt, transportError.getMessage());
+            }
+        }
+        throw lastTransportError;
     }
 
     /** Converts the raw Gemini envelope into FlowTwin's {@link ChatResponse} (source = "gemini"). */
