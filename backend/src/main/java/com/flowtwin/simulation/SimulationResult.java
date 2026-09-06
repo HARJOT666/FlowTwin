@@ -11,13 +11,23 @@ public class SimulationResult {
     private int peakTriageQueue;
     private int peakTreatmentQueue;
 
+    private double nurseUtilization;
+    private double doctorUtilization;
+    private double bedUtilization;
+
+    private String primaryBottleneck;
+
     public SimulationResult(
             int totalPatients,
             double averageTriageWait,
             double averageTreatmentWait,
             double averageLengthOfStay,
             int peakTriageQueue,
-            int peakTreatmentQueue) {
+            int peakTreatmentQueue,
+            double nurseUtilization,
+            double doctorUtilization,
+            double bedUtilization,
+            String primaryBottleneck) {
 
         this.totalPatients = totalPatients;
         this.averageTriageWait = averageTriageWait;
@@ -25,6 +35,10 @@ public class SimulationResult {
         this.averageLengthOfStay = averageLengthOfStay;
         this.peakTriageQueue = peakTriageQueue;
         this.peakTreatmentQueue = peakTreatmentQueue;
+        this.nurseUtilization = nurseUtilization;
+        this.doctorUtilization = doctorUtilization;
+        this.bedUtilization = bedUtilization;
+        this.primaryBottleneck = primaryBottleneck;
     }
 
     public int getTotalPatients() {
@@ -51,15 +65,35 @@ public class SimulationResult {
         return peakTreatmentQueue;
     }
 
+    public double getNurseUtilization() {
+        return nurseUtilization;
+    }
+
+    public double getDoctorUtilization() {
+        return doctorUtilization;
+    }
+
+    public double getBedUtilization() {
+        return bedUtilization;
+    }
+
+    public String getPrimaryBottleneck() {
+        return primaryBottleneck;
+    }
+
     @Override
     public String toString() {
 
         return "\n===== SIMULATION RESULT =====\n" +
-                "Total Patients       : " + totalPatients + "\n" +
-                "Average Triage Wait  : " + averageTriageWait + " min\n" +
+                "Total Patients        : " + totalPatients + "\n" +
+                "Average Triage Wait   : " + averageTriageWait + " min\n" +
                 "Average Treatment Wait: " + averageTreatmentWait + " min\n" +
                 "Average Length of Stay: " + averageLengthOfStay + " min\n" +
-                "Peak Triage Queue    : " + peakTriageQueue + "\n" +
-                "Peak Treatment Queue : " + peakTreatmentQueue + "\n";
+                "Peak Triage Queue     : " + peakTriageQueue + "\n" +
+                "Peak Treatment Queue  : " + peakTreatmentQueue + "\n" +
+                "Nurse Utilization     : " + nurseUtilization + "%\n" +
+                "Doctor Utilization    : " + doctorUtilization + "%\n" +
+                "Bed Utilization       : " + bedUtilization + "%\n" +
+                "Primary Bottleneck    : " + primaryBottleneck + "\n";
     }
 }

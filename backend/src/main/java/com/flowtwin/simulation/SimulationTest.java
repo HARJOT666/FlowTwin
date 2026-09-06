@@ -4,31 +4,29 @@ public class SimulationTest {
 
     public static void main(String[] args) {
 
-        SimulationEngine engine = new SimulationEngine();
+        Scenario baseline =
+                new Scenario(
+                        "Baseline",
+                        3,
+                        2,
+                        5
+                );
 
-        // Set up hospital resources
-        engine.setupHospital();
+        Scenario addDoctor =
+                new Scenario(
+                        "Add One Doctor",
+                        3,
+                        3,
+                        5
+                );
 
-        // Create 20 patients arriving every 2 minutes
-        for (int i = 1; i <= 20; i++) {
+        ScenarioRunner runner = new ScenarioRunner();
 
-            int acuity = (i % 3) + 1;
+        System.out.println("\n\n######## ADD ONE DOCTOR ########");
 
-            double arrivalTime = i * 2;
+        ScenarioResult doctorResult =
+                runner.runScenario(baseline, addDoctor);
 
-            Patient patient =
-                    new Patient(i, acuity, arrivalTime);
-
-            engine.schedulePatientArrival(
-                    patient,
-                    arrivalTime
-            );
-        }
-
-        // Run simulation and get results
-        SimulationResult result = engine.run();
-
-        // Print final results
-        System.out.println(result);
+        System.out.println(doctorResult);
     }
 }
