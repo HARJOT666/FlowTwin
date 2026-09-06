@@ -11,10 +11,10 @@ cp .env.example .env      # put your LLM_API_KEY in here
 docker compose up --build
 ```
 
-That starts Postgres, Redis, Kafka, and the backend. The built-in **DemoEventSimulator**
+That starts Postgres, Redis, and the backend. The built-in **DemoEventSimulator**
 begins emitting patient-flow events immediately, so the twin populates on its own.
 
-Run the app alone (needs Postgres/Redis/Kafka reachable, e.g. `docker compose up postgres redis kafka`):
+Run the app alone (needs Postgres/Redis reachable, e.g. `docker compose up postgres redis`):
 
 ```bash
 mvn spring-boot:run
@@ -50,7 +50,7 @@ curl -X POST http://localhost:8080/api/scenarios \
 com.flowtwin
 ├── config/       WebSocket (STOMP) + LLM properties
 ├── model/        domain enums + PatientEvent JPA entity
-├── ingestion/    Kafka wire message, consumer, event repository
+├── ingestion/    patient-event message DTO (fed to EventProcessingService)
 ├── twin/         live twin-state service (in-memory + Redis) + REST
 ├── simulation/   discrete-event simulation engine (arrival -> triage -> bed -> discharge)
 ├── scenario/     what-if orchestrator, metrics/deltas, persistence, REST

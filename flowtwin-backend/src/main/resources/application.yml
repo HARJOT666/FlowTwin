@@ -3,8 +3,8 @@ spring:
     name: flowtwin
   datasource:
     url: ${POSTGRES_URL:jdbc:postgresql://localhost:5432/flowtwin}
-    username: ${POSTGRES_USER:flowtwin}
-    password: ${POSTGRES_PASSWORD:flowtwin}
+    username: ${POSTGRES_USER:postgres}
+    password: ${POSTGRES_PASSWORD:postgres}
   jpa:
     hibernate:
       ddl-auto: update
@@ -13,29 +13,11 @@ spring:
     redis:
       host: ${REDIS_HOST:localhost}
       port: ${REDIS_PORT:6379}
-  kafka:
-    bootstrap-servers: ${KAFKA_BOOTSTRAP:localhost:9092}
-    consumer:
-      group-id: flowtwin
-      auto-offset-reset: latest
-      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
-      value-deserializer: org.springframework.kafka.support.serializer.JsonDeserializer
-      properties:
-        spring.json.value.default.type: com.flowtwin.ingestion.PatientEventMessage
-        spring.json.use.type.headers: false
-        spring.json.trusted.packages: "com.flowtwin.*"
-    producer:
-      key-serializer: org.apache.kafka.common.serialization.StringSerializer
-      value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
-      properties:
-        spring.json.add.type.headers: false
 
 server:
   port: 8080
 
 flowtwin:
-  kafka:
-    topic: patient-events
   simulator:
     enabled: true            # set false to disable the built-in demo event generator
   llm:

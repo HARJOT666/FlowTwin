@@ -4,8 +4,8 @@ import com.flowtwin.ingestion.PatientEventMessage;
 import com.flowtwin.model.Acuity;
 import com.flowtwin.model.EventType;
 import com.flowtwin.model.Zone;
+import com.flowtwin.service.EventProcessingService;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
@@ -15,24 +15,22 @@ import java.util.Random;
 import java.util.UUID;
 
 /**
- * Built-in demo data source: pushes synthetic patient-flow events to Kafka so the twin
- * comes alive with zero external dependencies. Disable with flowtwin.simulator.enabled=false.
+ * Built-in demo data source: feeds synthetic patient-flow events straight into the
+ * {@link EventProcessingService} so the twin comes alive with zero external dependencies.
+ * Disable with flowtwin.simulator.enabled=false.
  */
 @Component
 public class DemoEventSimulator {
 
-    private final KafkaTemplate<String, PatientEventMessage> kafka;
-    private final String topic;
+    private final EventProcessingService eventProcessing;
     private final boolean enabled;
     private final Random rng = new Random();
     private final Deque<String> inTriage = new ArrayDeque<>();
     private final Deque<String> inBed = new ArrayDeque<>();
 
-    public DemoEventSimulator(KafkaTemplate<String, PatientEventMessage> kafka,
-                              @Value("${flowtwin.kafka.topic}") String topic,
+    public DemoEventSimulator(EventProcessingService eventProcessing,
                               @Value("${flowtwin.simulator.enabled:true}") boolean enabled) {
-        this.kafka = kafka;
-        this.topic = topic;
+        this.eventProcessing = eventProcessing;
         this.enabled = enabled;
     }
 
@@ -56,7 +54,7 @@ public class DemoEventSimulator {
     }
 
     private void emit(String pid, EventType type, Zone zone, Acuity acuity) {
-        kafka.send(topic, pid, new PatientEventMessage(
+        eventProcessing.process(new PatientEventMessage(
                 UUID.randomUUID().toString(), pid, type, zone, acuity, System.currentTimeMillis()));
     }
 

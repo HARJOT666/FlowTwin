@@ -5,8 +5,9 @@ import com.flowtwin.model.EventType;
 import com.flowtwin.model.Zone;
 
 /**
- * Wire format on the Kafka topic. Timestamp kept as epoch millis to avoid
- * JSR-310 serializer setup on the Kafka (de)serializers.
+ * Transport-agnostic patient-event message: the unit of ingestion consumed by
+ * {@code EventProcessingService}. Timestamp kept as epoch millis so the record stays a
+ * plain, easily (de)serialized DTO regardless of the input mechanism producing it.
  */
 public record PatientEventMessage(
         String eventId,
