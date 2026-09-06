@@ -66,7 +66,7 @@ The LLM explains supplied calculations. It does not calculate forecasts, bottlen
 Example scenario:
 
 ```bash
-curl -X POST http://localhost:8080/api/scenarios \
+curl -X POST http://localhost:8090/api/scenarios \
   -H "Content-Type: application/json" \
   -d '{
     "name": "Extra triage nurse",
@@ -185,8 +185,9 @@ No patient identifiers or raw patient-event records are sent to Gemini.
 | `POSTGRES_PASSWORD` | `flowtwin` | Database password |
 | `REDIS_HOST` | `localhost` | Redis host |
 | `REDIS_PORT` | `6379` | Redis port |
+| `BACKEND_PORT` | `8090` | Backend port exposed on the host by Docker Compose |
 | `GEMINI_API_KEY` | empty | Optional Gemini narration key |
-| `GEMINI_MODEL` | `gemini-2.5-flash` | Gemini model |
+| `GEMINI_MODEL` | `gemini-3.5-flash` | Gemini model |
 | `GEMINI_BASE_URL` | Google Generative Language v1beta | Gemini API base URL |
 | `GEMINI_TIMEOUT_MS` | `20000` | Connect/read timeout |
 

@@ -24,7 +24,7 @@ public record AiProperties(
             Integer timeoutMs
     ) {
         public Gemini {
-            if (model == null || model.isBlank()) model = "gemini-2.5-flash";
+            if (model == null || model.isBlank()) model = "gemini-3.5-flash";
             if (baseUrl == null || baseUrl.isBlank())
                 baseUrl = "https://generativelanguage.googleapis.com/v1beta";
             if (timeoutMs == null || timeoutMs <= 0) timeoutMs = 20_000;

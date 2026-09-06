@@ -25,6 +25,6 @@ services:
       REDIS_HOST: redis
       FLOWTWIN_AI_PROVIDER: ${FLOWTWIN_AI_PROVIDER:-gemini}
       GEMINI_API_KEY: ${GEMINI_API_KEY:-}
-      GEMINI_MODEL: ${GEMINI_MODEL:-gemini-2.5-flash}
+      GEMINI_MODEL: ${GEMINI_MODEL:-gemini-3.5-flash}
     ports:
-      - "8080:8080"
+      - "${BACKEND_PORT:-8090}:8080"

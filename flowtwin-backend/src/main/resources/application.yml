@@ -24,7 +24,7 @@ flowtwin:
     provider: ${FLOWTWIN_AI_PROVIDER:gemini}
     gemini:
       api-key: ${GEMINI_API_KEY:}                                            # keep this in the environment, never in source/git
-      model: ${GEMINI_MODEL:gemini-2.5-flash}
+      model: ${GEMINI_MODEL:gemini-3.5-flash}
       base-url: ${GEMINI_BASE_URL:https://generativelanguage.googleapis.com/v1beta}
       timeout-ms: ${GEMINI_TIMEOUT_MS:20000}
 
