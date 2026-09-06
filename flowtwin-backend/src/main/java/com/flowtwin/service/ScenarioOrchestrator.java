@@ -1,6 +1,10 @@
 package com.flowtwin.service;
 
 import com.flowtwin.model.ResourceRole;
+import com.flowtwin.ai.dto.AiInsight;
+import com.flowtwin.ai.dto.RecommendationScore;
+import com.flowtwin.ai.recommendation.RecommendationEngine;
+import com.flowtwin.ai.service.AiInsightService;
 import com.flowtwin.model.ScenarioEntity;
 import com.flowtwin.narration.NarrationResult;
 import com.flowtwin.repository.ScenarioRepository;
@@ -37,15 +41,20 @@ public class ScenarioOrchestrator {
     private final NarrationService narration;
     private final ScenarioRepository repository;
     private final TwinBroadcaster broadcaster;
+    private final RecommendationEngine recommendations;
+    private final AiInsightService insights;
 
     public ScenarioOrchestrator(TwinStateService twin, SimulationEngine engine,
                                 NarrationService narration, ScenarioRepository repository,
-                                TwinBroadcaster broadcaster) {
+                                TwinBroadcaster broadcaster, RecommendationEngine recommendations,
+                                AiInsightService insights) {
         this.twin = twin;
         this.engine = engine;
         this.narration = narration;
         this.repository = repository;
         this.broadcaster = broadcaster;
+        this.recommendations = recommendations;
+        this.insights = insights;
     }
 
     public ScenarioResponse run(ScenarioRequest req) {
@@ -70,13 +79,15 @@ public class ScenarioOrchestrator {
                 req.name() == null ? "Scenario" : req.name(),
                 baseline, scenario, delta, detectBottlenecks(baseRes));
 
-        NarrationResult narr = narration.narrate(result);
+        RecommendationScore recommendation = recommendations.rankScenario(result, scenarioCfg);
+        AiInsight insight = insights.insights(now, baseline);
+        NarrationResult narr = narration.narrate(result, insight, recommendation);
 
         ScenarioEntity saved = repository.save(new ScenarioEntity(
                 result.name(), baseline.p90WaitMin(), scenario.p90WaitMin(),
                 narr.summary(), String.join("\n", narr.recommendations())));
 
-        ScenarioResponse response = new ScenarioResponse(saved.getId(), result, narr);
+        ScenarioResponse response = new ScenarioResponse(saved.getId(), result, narr, recommendation);
         broadcaster.broadcastInsight(response);
         return response;
     }

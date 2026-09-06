@@ -50,7 +50,7 @@ public class TwinStateService {
         mirrorToRedis();
     }
 
-    public TwinState snapshot() {
+    public synchronized TwinState snapshot() {
         return new TwinState(
                 patientsInDept.get(),
                 triageQueue.get(),
@@ -60,10 +60,10 @@ public class TwinStateService {
         );
     }
 
-    public double observedArrivalRatePerHour() {
+    public synchronized double observedArrivalRatePerHour() {
         pruneArrivals();
         int count = arrivals.size();
-        return count > 0 ? count : 12.0;
+        return count; // No arrivals means zero, not an invented demo arrival rate.
     }
 
     private void recordArrival(long epochMs) {

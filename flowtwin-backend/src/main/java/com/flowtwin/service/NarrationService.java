@@ -5,6 +5,8 @@ import com.flowtwin.narration.NarrationResult;
 import com.flowtwin.narration.PromptBuilder;
 import com.flowtwin.narration.TemplatedFallback;
 import com.flowtwin.scenario.ScenarioResult;
+import com.flowtwin.ai.dto.AiInsight;
+import com.flowtwin.ai.dto.RecommendationScore;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.data.redis.core.StringRedisTemplate;
@@ -13,6 +15,10 @@ import org.springframework.stereotype.Service;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
+import java.util.HexFormat;
 
 @Service
 public class NarrationService {
@@ -31,19 +37,44 @@ public class NarrationService {
     }
 
     public NarrationResult narrate(ScenarioResult result) {
-        String key = "narration:" + Integer.toHexString(result.hashKey());
-        String cached = redis.opsForValue().get(key);
-        if (cached != null) return decode(cached, "ai-cached");
+        return narrate(result, null, null);
+    }
+
+    public NarrationResult narrate(ScenarioResult result, AiInsight insight, RecommendationScore recommendation) {
+        PromptBuilder.Prompt p = prompts.build(result, insight, recommendation);
+        // Hash the exact grounded prompt: coarse rounded metrics can reuse factually wrong narration.
+        // The timestamp is not in the prompt, so identical evidence still benefits from Redis caching.
+        String key = cacheKey(p);
+        try {
+            String cached = redis.opsForValue().get(key);
+            if (cached != null) return decode(cached, "ai-cached");
+        } catch (Exception ex) {
+            log.warn("Narration cache unavailable; continuing without cached text.");
+        }
 
         try {
-            PromptBuilder.Prompt p = prompts.build(result);
             String raw = provider.generate(p.system(), p.user());
+            if (raw == null || raw.isBlank()) throw new IllegalStateException("Empty narration");
             NarrationResult res = parse(raw);
-            redis.opsForValue().set(key, encode(res), Duration.ofHours(6));
+            try {
+                redis.opsForValue().set(key, encode(res), Duration.ofHours(6));
+            } catch (Exception ex) {
+                log.warn("Narration cache write unavailable.");
+            }
             return res;
         } catch (Exception ex) {
-            log.warn("Narration LLM failed ({}). Falling back to templated summary.", ex.getMessage());
+            log.warn("Narration LLM unavailable. Falling back to templated summary.");
             return TemplatedFallback.build(result);
+        }
+    }
+
+    private static String cacheKey(PromptBuilder.Prompt prompt) {
+        try {
+            byte[] hash = MessageDigest.getInstance("SHA-256")
+                    .digest((prompt.system() + "\n" + prompt.user()).getBytes(StandardCharsets.UTF_8));
+            return "narration:ai-v1:" + HexFormat.of().formatHex(hash);
+        } catch (NoSuchAlgorithmException ex) {
+            throw new IllegalStateException("SHA-256 unavailable", ex);
         }
     }
 

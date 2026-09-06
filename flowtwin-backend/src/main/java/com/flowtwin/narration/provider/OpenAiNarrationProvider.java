@@ -26,6 +26,9 @@ public class OpenAiNarrationProvider implements NarrationProvider {
 
     @Override
     public String generate(String system, String user) {
+        if (props.apiKey() == null || props.apiKey().isBlank()) {
+            throw new IllegalStateException("LLM API key not configured");
+        }
         ChatRequest req = new ChatRequest(
                 props.model(),
                 List.of(new Msg("system", system), new Msg("user", user)),
