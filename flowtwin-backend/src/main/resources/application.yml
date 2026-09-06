@@ -20,11 +20,13 @@ server:
 flowtwin:
   simulator:
     enabled: true            # set false to disable the built-in demo event generator
-  llm:
-    provider: ${LLM_PROVIDER:openai}
-    api-key: ${LLM_API_KEY:}                       # REQUIRED for AI narration
-    base-url: ${LLM_BASE_URL:https://api.openai.com/v1}
-    model: ${LLM_MODEL:gpt-4o-mini}
+  ai:
+    provider: ${FLOWTWIN_AI_PROVIDER:gemini}
+    gemini:
+      api-key: ${GEMINI_API_KEY:}                                            # keep this in the environment, never in source/git
+      model: ${GEMINI_MODEL:gemini-3.5-flash-lite}
+      base-url: ${GEMINI_BASE_URL:https://generativelanguage.googleapis.com/v1beta}
+      timeout-ms: ${GEMINI_TIMEOUT_MS:20000}
 
 logging:
   level:

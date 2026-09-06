@@ -1,25 +1,36 @@
-package com.flowtwin.narration;
+package com.flowtwin.gemini;
 
 import com.flowtwin.scenario.Metrics;
 import com.flowtwin.scenario.ScenarioResult;
 import org.springframework.stereotype.Component;
 
 /**
- * Builds a GROUNDED prompt: the model is given only the simulation's own numbers and is
- * asked to explain/prioritise them - never to invent figures. This is the guardrail that
- * keeps narration trustworthy.
+ * Builds the GROUNDED Gemini prompt from simulation metrics (baseline, scenario, delta,
+ * bottlenecks). The model is handed only the simulation's own numbers and asked to explain and
+ * prioritise them - never to invent figures. This is the guardrail that keeps narration trustworthy.
  */
 @Component
-public class PromptBuilder {
+public class GeminiPromptBuilder {
 
     public record Prompt(String system, String user) {}
 
     private static final String SYSTEM = """
             You are an operations assistant for a hospital emergency department.
-            You ONLY use the numbers provided by the user. Never invent or estimate figures.
-            Be concise and practical. Respond in this exact shape:
-            - Line 1: a single-sentence summary of the scenario's impact.
-            - Then 2-4 recommendation lines, each starting with "- ".
+            The numbers you are given come from FlowTwin's discrete-event simulation engine - NOT
+            from a live hospital. You do NOT run the simulation; you only explain and prioritise
+            the values supplied to you.
+
+            Rules:
+            - Use ONLY the numbers provided by the user. Never invent, estimate, or extrapolate figures.
+            - Do not claim access to live hospital data beyond the supplied values.
+            - Base every numerical statement solely on the supplied data.
+            - If the data looks unrealistic or internally inconsistent, say so and note that it is a
+              simulation result - do not silently "correct" it.
+
+            Return your answer as JSON with these fields:
+            - "summary": one concise sentence describing the scenario's impact vs. baseline.
+            - "recommendations": 2 to 4 concrete, actionable operational recommendations.
+            - "tradeoffs": the important tradeoffs of acting on those recommendations.
             """;
 
     public Prompt build(ScenarioResult r) {

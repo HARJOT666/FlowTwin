@@ -1,6 +1,13 @@
 target/
 *.class
-.env
 .idea/
 *.iml
 .vscode/
+
+# Secrets - never commit these
+.env
+.env.*
+!.env.example
+application-local.properties
+application-local.yml
+*.local.properties

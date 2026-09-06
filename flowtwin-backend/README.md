@@ -7,7 +7,7 @@ them with an LLM. Flesh out the `TODO`s to harden it.
 ## Run it
 
 ```bash
-cp .env.example .env      # put your LLM_API_KEY in here
+cp .env.example .env      # put your GEMINI_API_KEY in here (never commit .env)
 docker compose up --build
 ```
 
@@ -48,13 +48,13 @@ curl -X POST http://localhost:8080/api/scenarios \
 
 ```
 com.flowtwin
-├── config/       WebSocket (STOMP) + LLM properties
+├── config/       WebSocket (STOMP) + AI (Gemini) properties
 ├── model/        domain enums + PatientEvent JPA entity
 ├── ingestion/    patient-event message DTO (fed to EventProcessingService)
 ├── twin/         live twin-state service (in-memory + Redis) + REST
 ├── simulation/   discrete-event simulation engine (arrival -> triage -> bed -> discharge)
 ├── scenario/     what-if orchestrator, metrics/deltas, persistence, REST
-├── narration/    grounded prompt builder, LLM service (cache + fallback), OpenAI-compatible provider
+├── narration/    grounded prompt builder, narration service (cache + fallback), Gemini provider
 ├── ws/           WebSocket broadcaster
 └── simulator/    built-in demo event generator
 ```
@@ -70,6 +70,6 @@ com.flowtwin
 - **Not compiled here** — written to standard conventions but build it yourself (`mvn package`) before relying on it.
 - Time-windowed scenario changes (`from`/`to`) are parsed but applied for the whole horizon — see `ScenarioOrchestrator.applyChanges`.
 - Service-time and arrival assumptions are constants/rough estimates — replace with values learned from history.
-- Only an OpenAI-compatible provider is implemented; add Gemini/Claude providers behind `NarrationProvider`.
+- Narration is powered by the Gemini API behind `NarrationProvider`; set `GEMINI_API_KEY` (see `.env.example`). Without a key, or on any Gemini failure/timeout, narration falls back to a deterministic templated summary (`"source": "fallback"`).
 - Redis stores headline metrics only; full snapshot serialization is a TODO.
 - Spring Boot 4 notes: Jackson 3 is the default; JUnit 4 is dropped (use JUnit 5); check security defaults before exposing endpoints.

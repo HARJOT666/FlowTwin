@@ -1,8 +1,8 @@
 package com.flowtwin.service;
 
+import com.flowtwin.gemini.model.ChatResponse;
 import com.flowtwin.model.ResourceRole;
 import com.flowtwin.model.ScenarioEntity;
-import com.flowtwin.narration.NarrationResult;
 import com.flowtwin.repository.ScenarioRepository;
 import com.flowtwin.scenario.Metrics;
 import com.flowtwin.scenario.ScenarioChange;
@@ -70,7 +70,7 @@ public class ScenarioOrchestrator {
                 req.name() == null ? "Scenario" : req.name(),
                 baseline, scenario, delta, detectBottlenecks(baseRes));
 
-        NarrationResult narr = narration.narrate(result);
+        ChatResponse narr = narration.narrate(result);
 
         ScenarioEntity saved = repository.save(new ScenarioEntity(
                 result.name(), baseline.p90WaitMin(), scenario.p90WaitMin(),
