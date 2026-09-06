@@ -38,10 +38,16 @@ public class EventProcessingService {
 
     public void process(PatientEventMessage msg) {
         try {
+            if (repository.existsByEventId(msg.eventId())) {
+                log.debug("Duplicate event {} ignored", msg.eventId());
+                return;
+            }
             Instant when = Instant.ofEpochMilli(msg.occurredAtEpochMs());
             twin.apply(msg);
-            repository.save(new PatientEvent(msg.patientId(), msg.type(), msg.zone(), msg.acuity(), when));
+            repository.save(new PatientEvent(msg.eventId(), msg.patientId(), msg.type(), msg.zone(), msg.acuity(), when));
             broadcaster.broadcastState(twin.snapshot());
+        } catch (org.springframework.dao.DataIntegrityViolationException e) {
+            log.debug("Duplicate event {} rejected by unique constraint", msg.eventId());
         } catch (Exception e) {
             log.error("Failed to process event {}: {}", msg.eventId(), e.getMessage());
         }

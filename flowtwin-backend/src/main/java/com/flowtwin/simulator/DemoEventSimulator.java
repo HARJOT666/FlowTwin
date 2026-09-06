@@ -34,7 +34,7 @@ public class DemoEventSimulator {
         this.enabled = enabled;
     }
 
-    @Scheduled(fixedRate = 1500)
+    @Scheduled(fixedRate = 5000)
     public void tick() {
         if (!enabled) return;
         double roll = rng.nextDouble();

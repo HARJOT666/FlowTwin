@@ -1,10 +1,8 @@
-target/
-*.class
-.env
-.idea/
-*.iml
-.vscode/
+# macOS
+.DS_Store
 
 # Clinical dataset — never commit raw data
 triagegeist/
+triagegeist.zip
 *.csv
+*.zip
