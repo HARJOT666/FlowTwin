@@ -100,25 +100,50 @@ flowchart TD
 ## Project Structure
 
 ```
-flowtwin/
-├── backend/                     # Spring Boot application (Java 17, Spring Boot 4.0)
-│   ├── src/main/java/com/flowtwin/
-│   │   ├── api/                 # REST controllers + WebSocket endpoints
-│   │   ├── ingestion/           # Kafka consumers, event handlers
-│   │   ├── twin/                # Twin-state service (Redis + JPA)
-│   │   ├── scenario/            # Scenario orchestrator
-│   │   ├── simulation/          # Discrete-event simulation engine (in-process)
-│   │   ├── narration/           # LLM narration service (prompt build, provider client, cache)
-│   │   ├── model/               # Domain entities (Patient, Resource, Event…)
-│   │   └── config/              # Kafka, Redis, WebSocket, LLM, security config
-│   └── src/main/resources/
-├── simulator/                   # Event generator (seeds the demo)
-├── frontend/                    # React dashboard
-├── docker-compose.yml           # Postgres, Redis, Kafka, backend, frontend
-└── README.md
-```
-
----
+com.flowtwin
+│
+├── FlowTwinApplication.java
+│
+├── controller
+│   └── ScenarioController.java
+│
+├── service
+│   └── [core application services]
+│
+├── model
+│   ├── Zone.java
+│   ├── ResourceRole.java
+│   └── [other domain models]
+│
+├── config
+│   ├── AiProperties.java
+│   ├── [database/web configuration]
+│   └── ...
+│
+├── scenario
+│   ├── ScenarioRequest.java
+│   ├── ScenarioChange.java
+│   ├── ScenarioOrchestrator.java
+│   └── [scenario result models]
+│
+├── simulation
+│   ├── [simulation engine]
+│   ├── [metrics calculation]
+│   └── [bottleneck detection]
+│
+├── narration
+│   ├── NarrationService.java
+│   └── TemplatedFallback.java
+│
+└── gemini                         🤖
+    │
+    ├── GeminiService.java
+    ├── GeminiPromptBuilder.java
+    │
+    └── model
+        ├── GeminiRequest.java
+        ├── GeminiResponse.java
+        └── ChatResponse.java
 
 ## Getting Started
 
