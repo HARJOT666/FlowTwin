@@ -2,29 +2,52 @@ services:
   postgres:
     image: postgres:16
     environment:
-      POSTGRES_DB: flowtwin
-      POSTGRES_USER: flowtwin
-      POSTGRES_PASSWORD: flowtwin
+      POSTGRES_DB: ${POSTGRES_DB:-flowtwin}
+      POSTGRES_USER: ${POSTGRES_USER:-flowtwin}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-flowtwin}
     ports:
       - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER:-flowtwin} -d $${POSTGRES_DB:-flowtwin}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
 
   redis:
     image: redis:7
     ports:
       - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
 
   backend:
     build: .
     depends_on:
-      - postgres
-      - redis
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
     environment:
-      POSTGRES_URL: jdbc:postgresql://postgres:5432/flowtwin
-      POSTGRES_USER: flowtwin
-      POSTGRES_PASSWORD: flowtwin
+      POSTGRES_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB:-flowtwin}
+      POSTGRES_USER: ${POSTGRES_USER:-flowtwin}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-flowtwin}
       REDIS_HOST: redis
       FLOWTWIN_AI_PROVIDER: ${FLOWTWIN_AI_PROVIDER:-gemini}
       GEMINI_API_KEY: ${GEMINI_API_KEY:-}
       GEMINI_MODEL: ${GEMINI_MODEL:-gemini-3.5-flash}
+      # Clinical loader — gated OFF by default; enable per-run with FLOWTWIN_CLINICAL_LOAD_ON_START=true
+      FLOWTWIN_CLINICAL_LOAD_ON_START: ${FLOWTWIN_CLINICAL_LOAD_ON_START:-false}
+      FLOWTWIN_CLINICAL_DATA_DIR: ${FLOWTWIN_CLINICAL_DATA_DIR:-/data/triagegeist}
+    volumes:
+      # Read-only mount of the local dataset; loader only reads it when explicitly enabled
+      - ../triagegeist:/data/triagegeist:ro
     ports:
       - "${BACKEND_PORT:-8090}:8080"
+
+volumes:
+  postgres_data:

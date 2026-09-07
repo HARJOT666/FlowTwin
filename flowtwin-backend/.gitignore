@@ -11,3 +11,8 @@ target/
 application-local.properties
 application-local.yml
 *.local.properties
+
+# Clinical dataset
+triagegeist/
+triagegeist.zip
+*.csv

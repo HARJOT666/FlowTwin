@@ -27,7 +27,7 @@ class ArrivalForecastServiceTest {
         when(events.countByTypeAndOccurredAtGreaterThanEqualAndOccurredAtLessThan(any(), any(), any()))
                 .thenReturn(a, b, c, d);
         when(events.findFirstByTypeOrderByOccurredAtAsc(EventType.PATIENT_ARRIVED))
-                .thenReturn(Optional.of(new PatientEvent("history", EventType.PATIENT_ARRIVED,
+                .thenReturn(Optional.of(new PatientEvent("evt-0", "history", EventType.PATIENT_ARRIVED,
                         Zone.TRIAGE, Acuity.L3, NOW.minus(5, ChronoUnit.HOURS))));
     }
 
@@ -73,7 +73,7 @@ class ArrivalForecastServiceTest {
     @Test void recentStartupDoesNotTreatMissingHoursAsZeroHistory() {
         history(0, 0, 0, 30);
         when(events.findFirstByTypeOrderByOccurredAtAsc(any())).thenReturn(Optional.of(
-                new PatientEvent("new", EventType.PATIENT_ARRIVED, Zone.TRIAGE, Acuity.L3, NOW.minusSeconds(600))));
+                new PatientEvent("evt-5", "new", EventType.PATIENT_ARRIVED, Zone.TRIAGE, Acuity.L3, NOW.minusSeconds(600))));
         assertThat(service.forecast(state(30), NOW).source()).isEqualTo(ArrivalForecast.Source.OBSERVED_RATE);
     }
 

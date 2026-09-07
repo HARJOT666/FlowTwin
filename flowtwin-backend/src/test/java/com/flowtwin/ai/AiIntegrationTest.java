@@ -93,10 +93,10 @@ class AiIntegrationTest {
 
     @Test void arrivalQueryFiltersTypesAndUsesHalfOpenBoundaries() {
         Instant from = Instant.parse("2026-09-06T09:00:00Z"), to = from.plusSeconds(3600);
-        events.save(new PatientEvent("before", EventType.PATIENT_ARRIVED, Zone.TRIAGE, Acuity.L3, from.minusSeconds(1)));
-        events.save(new PatientEvent("start", EventType.PATIENT_ARRIVED, Zone.TRIAGE, Acuity.L3, from));
-        events.save(new PatientEvent("end", EventType.PATIENT_ARRIVED, Zone.TRIAGE, Acuity.L3, to));
-        events.save(new PatientEvent("discharged", EventType.DISCHARGED, Zone.BED, Acuity.L3, from.plusSeconds(100)));
+        events.save(new PatientEvent("evt-1", "before", EventType.PATIENT_ARRIVED, Zone.TRIAGE, Acuity.L3, from.minusSeconds(1)));
+        events.save(new PatientEvent("evt-2", "start", EventType.PATIENT_ARRIVED, Zone.TRIAGE, Acuity.L3, from));
+        events.save(new PatientEvent("evt-3", "end", EventType.PATIENT_ARRIVED, Zone.TRIAGE, Acuity.L3, to));
+        events.save(new PatientEvent("evt-4", "discharged", EventType.DISCHARGED, Zone.BED, Acuity.L3, from.plusSeconds(100)));
         assertThat(events.countByTypeAndOccurredAtGreaterThanEqualAndOccurredAtLessThan(
                 EventType.PATIENT_ARRIVED, from, to)).isEqualTo(1);
         assertThat(events.findFirstByTypeOrderByOccurredAtAsc(EventType.PATIENT_ARRIVED).orElseThrow().getPatientId())
